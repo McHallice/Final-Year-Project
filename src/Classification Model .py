@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[27]:
-
-
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -16,14 +10,14 @@ from tensorflow.keras.models import Sequential
 
 import pathlib
 
-data_dir = 'data/fish/'
+data_dir = 'data/birds/'
 data_dir = pathlib.Path(data_dir)
 
 image_count = len(list(data_dir.glob('*/*.jpg')))
 print(image_count)
 
-catla = list(data_dir.glob('catla/*'))
-PIL.Image.open(str(catla[0]))
+crow = list(data_dir.glob('crow/*'))
+PIL.Image.open(str(crow[0]))
 
 
 batch_size = 32
@@ -70,9 +64,17 @@ AUTOTUNE = tf.data.AUTOTUNE
 train_ds = train_ds.cache().shuffle(1000).prefetch(buffer_size=AUTOTUNE)
 val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
 
-num_classes = 6
+normalization_layer = layers.experimental.preprocessing.Rescaling(1./255)
 
-model = Sequential([
+normalized_ds = train_ds.map(lambda x, y: (normalization_layer(x), y))
+image_batch, labels_batch = next(iter(normalized_ds))
+first_image = image_batch[0]
+# Notice the pixels values are now in `[0,1]`.
+print(np.min(first_image), np.max(first_image))
+
+num_classes = 7
+
+model = tf.keras.models.Sequential([
   layers.experimental.preprocessing.Rescaling(1./255, input_shape=(img_height, img_width, 3)),
   layers.Conv2D(16, 3, padding='same', activation='relu'),
   layers.MaxPooling2D(),
@@ -85,13 +87,15 @@ model = Sequential([
   layers.Dense(num_classes)
 ])
 
+
+
 model.compile(optimizer='adam',
               loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
               metrics=['accuracy'])
 
 model.summary()
 
-epochs=10
+epochs = 10
 history = model.fit(
   train_ds,
   validation_data=val_ds,
@@ -133,11 +137,39 @@ data_augmentation = keras.Sequential(
 
 plt.figure(figsize=(10, 10))
 for images, _ in train_ds.take(1):
-  for i in range(9):
-    augmented_images = data_augmentation(images)
-    ax = plt.subplot(3, 3, i + 1)
-    plt.imshow(augmented_images[0].numpy().astype("uint8"))
-    plt.axis("off")
+    for i in range(9):
+        augmented_images = data_augmentation(images)
+        ax = plt.subplot(3, 3, i + 1)
+        plt.imshow(augmented_images[0].numpy().astype("uint8"))
+        plt.axis("off")
+
+model = tf.keras.models.Sequential([
+  data_augmentation,
+  layers.experimental.preprocessing.Rescaling(1./255),
+  layers.Conv2D(16, 3, padding='same', activation='relu'),
+  layers.MaxPooling2D(),
+  layers.Conv2D(32, 3, padding='same', activation='relu'),
+  layers.MaxPooling2D(),
+  layers.Conv2D(64, 3, padding='same', activation='relu'),
+  layers.MaxPooling2D(),
+  layers.Dropout(0.2),
+  layers.Flatten(),
+  layers.Dense(128, activation='relu'),
+  layers.Dense(num_classes)
+])
+
+model.compile(optimizer='adam',
+              loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+              metrics=['accuracy'])
+
+model.summary()
+
+epochs = 15
+history = model.fit(
+  train_ds,
+  validation_data=val_ds,
+  epochs=epochs
+)
     
 acc = history.history['accuracy']
 val_acc = history.history['val_accuracy']
@@ -160,15 +192,4 @@ plt.plot(epochs_range, val_loss, label='Validation Loss')
 plt.legend(loc='upper right')
 plt.title('Training and Validation Loss')
 plt.show()
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
 
